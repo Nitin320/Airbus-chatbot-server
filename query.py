@@ -1,41 +1,42 @@
 from flask import Flask, request, jsonify
 import os
 import requests
-import fitz  # PyMuPDF for PDF processing
-import faiss  # Now using faiss-cpu
+import faiss  # FAISS for vector search
 import numpy as np
+import pickle  # To save/load data
 from sentence_transformers import SentenceTransformer
 from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
-# Set your Together AI API key
+# Set API key for Together AI
 TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY", "4112fdd91cc387561671f0d859fa17a239d249d8387ce05a009d5e48035bacfb")
 TOGETHER_API_URL = "https://api.together.xyz/v1/chat/completions"
 
 # Load Sentence Transformer model for embeddings
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
-# Initialize FAISS index
-index = None
-stored_texts = []
+# File paths for FAISS index and text chunks
+FAISS_INDEX_FILE = "faiss_index.bin"
+TEXT_CHUNKS_FILE = "text_chunks.pkl"
 
-# Function to extract text from PDF
-def extract_text_from_pdf(pdf_path):
-    doc = fitz.open(pdf_path)
-    text = "\n".join([page.get_text("text") for page in doc])
-    return text
+index = None  # FAISS index
+stored_texts = []  # Stores extracted text chunks
 
-# Function to create FAISS index
-def create_faiss_index(text_chunks):
+# Function to load FAISS index if it exists
+def load_faiss_index():
     global index, stored_texts
-    stored_texts = text_chunks
-    embeddings = embedding_model.encode(text_chunks)
-    index = faiss.IndexFlatL2(embeddings.shape[1])
-    index.add(np.array(embeddings))
+    if os.path.exists(FAISS_INDEX_FILE) and os.path.exists(TEXT_CHUNKS_FILE):
+        index = faiss.read_index(FAISS_INDEX_FILE)
+        with open(TEXT_CHUNKS_FILE, "rb") as f:
+            stored_texts = pickle.load(f)
+        print("✅ FAISS index and text chunks loaded successfully.")
+        return True
+    print("❌ No FAISS index found. Please run 'train.py' first.")
+    return False
 
-# Function to retrieve relevant chunks
+# Function to retrieve relevant text chunks
 def retrieve_relevant_chunks(query, top_k=3):
     query_embedding = embedding_model.encode([query])
     distances, indices = index.search(np.array(query_embedding), top_k)
@@ -69,12 +70,9 @@ def get_ai_response(prompt, context=""):
     except Exception as e:
         return f"Error: {str(e)}"
 
-# Load and process PDF at startup
-PDF_PATH = "a320training.pdf"  # Set your PDF file path here
-if os.path.exists(PDF_PATH):
-    extracted_text = extract_text_from_pdf(PDF_PATH)
-    text_chunks = [extracted_text[i:i+500] for i in range(0, len(extracted_text), 500)]
-    create_faiss_index(text_chunks)
+# Load FAISS index
+if not load_faiss_index():
+    exit()
 
 @app.route("/", methods=["GET"])
 def health_check():

@@ -1,9 +1,7 @@
-fastapi
-uvicorn
+flask
+flask-cors
 requests
-pydantic
-faiss-cpu
 numpy
+faiss-cpu
 sentence-transformers
-pymupdf
-mangum
+pickle5  # Only required for older Python versions, otherwise built-in
