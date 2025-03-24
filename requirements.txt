@@ -4,4 +4,3 @@ requests
 numpy
 faiss-cpu
 sentence-transformers
-pickle5  # Only required for older Python versions, otherwise built-in
